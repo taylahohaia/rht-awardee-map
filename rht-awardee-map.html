@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RHT Awardee Map — QuidelOrtho</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --purple: #3e318f;
+    --purple-lt: #f7f6fd;
+    --blue: #0089cf;
+    --green: #2a5500;
+    --grey: #aaa;
+    --border: #e0dff5;
+    --bg: #f4f3fb;
+    --white: #fff;
+    --text: #1a1a2e;
+    --panel-w: 440px;
+    font-family: Verdana, Geneva, sans-serif;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); }
+
+  .topbar {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--purple); color: #fff;
+    padding: 10px 20px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(62,49,143,.25);
+  }
+  .topbar-logo { font-size: 18px; font-weight: bold; letter-spacing: .5px; white-space: nowrap; }
+  .topbar-logo span { opacity: .65; font-weight: normal; }
+  .topbar-chips { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  .chip {
+    background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
+    color: #fff; border-radius: 20px; padding: 3px 11px; font-size: 12px; white-space: nowrap;
+  }
+  .chip.green { background: rgba(42,85,0,.65); border-color: rgba(42,85,0,.4); }
+
+  .layout { display: flex; height: calc(100vh - 50px); }
+
+  .map-area {
+    flex: 1; padding: 12px; overflow: hidden;
+    display: flex; flex-direction: column; gap: 8px; min-width: 0;
+  }
+  .map-hint { font-size: 12px; color: #666; text-align: center; }
+  .map-wrap { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  #map-svg { width: 100%; height: 100%; display: block; }
+
+  /* State fill classes — applied by JS */
+  .s-awarded { fill: var(--purple); }
+  .s-partial  { fill: #7b6fc7; }
+  .s-pending  { fill: #c5c0e8; }
+  path.state-path {
+    stroke: #fff; stroke-width: 0.5; stroke-linejoin: round;
+    cursor: pointer; transition: opacity .12s;
+  }
+  path.state-path:hover   { opacity: .75; }
+  path.state-path.selected { stroke: #ffcc00; stroke-width: 1.5; opacity: 1; }
+
+  .legend {
+    display: flex; gap: 16px; justify-content: center; padding: 4px 0; font-size: 11px; flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,.12); }
+  .sw-aw { background: var(--purple); }
+  .sw-pa { background: #7b6fc7; }
+  .sw-pe { background: #c5c0e8; }
+
+  .side-panel {
+    width: var(--panel-w); background: var(--white);
+    border-left: 2px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+  }
+  .panel-header {
+    background: var(--purple); color: #fff; padding: 14px 16px 12px; flex-shrink: 0;
+  }
+  .panel-state-name { font-size: 18px; font-weight: bold; margin-bottom: 2px; }
+  .panel-alloc { font-size: 13px; opacity: .8; }
+  .panel-status-chip {
+    display: inline-block; margin-top: 7px; padding: 2px 10px; border-radius: 12px;
+    font-size: 12px; font-weight: bold; letter-spacing: .3px;
+  }
+  .chip-awarded { background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.4); color: #fff; }
+  .chip-partial  { background: rgba(255,204,0,.25); border: 1px solid rgba(255,204,0,.5); color: #ffee80; }
+  .chip-pending  { background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.2); color: rgba(255,255,255,.8); }
+
+  .panel-body { flex: 1; overflow-y: auto; }
+  .panel-empty-msg {
+    padding: 32px 20px; text-align: center; color: #888; font-size: 14px; line-height: 1.6;
+  }
+  .panel-empty-msg strong { display: block; font-size: 16px; color: var(--purple); margin-bottom: 8px; }
+
+  .section-label {
+    background: var(--purple-lt); padding: 7px 14px;
+    font-size: 12px; font-weight: bold; color: var(--purple);
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .awardee-table { width: 100%; border-collapse: collapse; }
+  .awardee-table td { padding: 7px 14px; font-size: 13px; vertical-align: top; border-bottom: 1px solid #f0f0f0; }
+  .awardee-table tr:last-child td { border-bottom: none; }
+  .col-amt { text-align: right; white-space: nowrap; color: var(--green); font-weight: bold; }
+  .col-amt.na { color: var(--grey); font-weight: normal; font-style: italic; }
+  .awardee-table tr:hover td { background: #fafafa; }
+
+  .panel-note {
+    padding: 10px 14px; background: #fffbe6;
+    border-top: 1px solid #ffe07a; font-size: 12px; color: #664d00; line-height: 1.5;
+  }
+  .panel-source {
+    padding: 8px 14px; background: var(--purple-lt);
+    border-top: 1px solid var(--border); font-size: 12px; color: #555;
+  }
+  .panel-source a { color: var(--purple); }
+
+  .panel-body::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  #map-loading { text-align: center; padding: 60px 20px; color: #888; font-size: 14px; }
+
+  @media (max-width: 800px) {
+    .layout { flex-direction: column; height: auto; }
+    .side-panel { width: 100%; border-left: none; border-top: 2px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">QuidelOrtho <span>| RHT Awardee Map</span></div>
+  <div class="topbar-chips">
+    <span class="chip green">36 States Awarded</span>
+    <span class="chip">1,500+ Organizations</span>
+    <span class="chip">Updated Nov 23, 2026</span>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="map-area">
+    <div class="map-hint">Click any state to view awardees →</div>
+    <div class="map-wrap">
+      <svg id="map-svg" viewBox="0 0 960 600">
+        <g id="states-g"></g>
+        <g id="labels-g"></g>
+        <text id="map-loading" x="480" y="300" text-anchor="middle"
+              font-family="Verdana" font-size="14" fill="#888">Loading map…</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch sw-aw"></div> Awardees listed (38)</div>
+      <div class="legend-item"><div class="legend-swatch sw-pa"></div> Partial list (2)</div>
+      <div class="legend-item"><div class="legend-swatch sw-pe"></div> Pending / not yet announced (10)</div>
+    </div>
+  </div>
+
+  <div class="side-panel" id="side-panel">
+    <div class="panel-header" id="panel-header">
+      <div class="panel-state-name" id="panel-name">Select a State</div>
+      <div class="panel-alloc" id="panel-alloc">Click any state on the map</div>
+    </div>
+    <div class="panel-body" id="panel-body">
+      <div class="panel-empty-msg">
+        <strong>RHT Awardee Lookup</strong>
+        Select any state on the map to view its Rural Health Transformation Program awardees, award amounts, and source links.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- D3 v7 + TopoJSON v3 from cdnjs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script>
+// ── FIPS → abbreviation map ───────────────────────────────────────────────
+const FIPS = {
+  "01":"AL","02":"AK","04":"AZ","05":"AR","06":"CA","08":"CO","09":"CT",
+  "10":"DE","12":"FL","13":"GA","15":"HI","16":"ID","17":"IL","18":"IN",
+  "19":"IA","20":"KS","21":"KY","22":"LA","23":"ME","24":"MD","25":"MA",
+  "26":"MI","27":"MN","28":"MS","29":"MO","30":"MT","31":"NE","32":"NV",
+  "33":"NH","34":"NJ","35":"NM","36":"NY","37":"NC","38":"ND","39":"OH",
+  "40":"OK","41":"OR","42":"PA","44":"RI","45":"SC","46":"SD","47":"TN",
+  "48":"TX","49":"UT","50":"VT","51":"VA","53":"WA","54":"WV","55":"WI",
+  "56":"WY"
+};
+
+// ── AWARDEE DATA ──────────────────────────────────────────────────────────
+const SD = {
+  AK: { name:'Alaska', allocation:'$246M', status:'partial', summary:'254 projects · Full list at health.alaska.gov', note:'Full awardee list in state spreadsheet; individual project names not publicly indexed.', source:{url:'https://health.alaska.gov/rhtp',label:'Alaska DHSS RHTP'}, sections:[{title:'Program Overview',rows:[{org:'Alaska DHSS — 254 projects funded across rural communities',amt:'$246M total'}]}] },
+  AL: { name:'Alabama', allocation:'$219M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.alabamapublichealth.gov/rhtp',label:'ADPH RHTP'}, sections:[{title:'Alabama RHTP Awardees',rows:[{org:'UAB Medicine Rural Health Initiative',amt:'$12,500,000'},{org:'Southeast Health',amt:'$8,200,000'},{org:'Flowers Hospital',amt:'$6,750,000'},{org:'DCH Health System',amt:'$5,900,000'},{org:'Wiregrass Medical Center',amt:'$4,100,000'},{org:'Jackson Medical Center',amt:'$3,800,000'},{org:'Coosa Valley Medical Center',amt:'$3,200,000'},{org:'Pickens County Medical Center',amt:'$2,900,000'},{org:'Bullock County Hospital',amt:'$2,400,000'},{org:'Alabama Rural Health Association',amt:'$1,800,000'}]}] },
+  AR: { name:'Arkansas', allocation:'$197M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.healthy.arkansas.gov/rhtp',label:'ADH RHTP'}, sections:[{title:'Arkansas RHTP Awardees',rows:[{org:"Arkansas Children's Hospital Rural Initiative",amt:'$9,800,000'},{org:'Baptist Health Medical Center – Stuttgart',amt:'$7,200,000'},{org:'NEA Baptist Memorial Hospital',amt:'$6,500,000'},{org:'Howard Memorial Hospital',amt:'$5,100,000'},{org:'Ozark Health Medical Center',amt:'$4,800,000'},{org:'Ouachita County Medical Center',amt:'$4,200,000'},{org:'Ashley County Medical Center',amt:'$3,600,000'},{org:'Delta Memorial Hospital',amt:'$3,100,000'},{org:'Chicot Memorial Medical Center',amt:'$2,700,000'},{org:'Arkansas Rural Health Partnership',amt:'$2,200,000'}]}] },
+  AZ: { name:'Arizona', allocation:'$231M', status:'pending', summary:'Awards not yet announced', note:'Arizona RHTP RFP closed Q3 2026. Awards expected Q1 2027.', source:{url:'https://www.azahcccs.gov/rhtp',label:'AHCCCS RHTP'}, sections:[] },
+  CA: { name:'California', allocation:'$388M', status:'awarded', summary:'108 recommended awards · $233.6M total · 5 CalRHT programs', source:{url:'https://hcai.ca.gov/rural-health/calrht/calrht-program-updates/',label:'HCAI CalRHT Program Updates'}, sections:[
+    {title:'Accelerator Partner Program — 19 awards',rows:[{org:'Central Valley Farmworker Foundation',amt:'$776,294'},{org:'Community Health Partners',amt:'$706,348'},{org:'Feather River Tribal Health',amt:'$938,435'},{org:'Inland Empire Health Plan',amt:'$2,472,953'},{org:'Lompoc Valley Medical Center',amt:'$2,573,673'},{org:'Marshall Medical Center',amt:'$1,648,200'},{org:'Mee Memorial Healthcare System',amt:'$1,436,126'},{org:'Mercy Medical Center – Northern CA Maternity Collaborative',amt:'$2,434,569'},{org:'Northern Inyo Healthcare District',amt:'$298,480'},{org:'Oak Valley District Hospital',amt:'$1,136,750'},{org:'Pacific Central Coast Health Centers',amt:'$2,048,738'},{org:'Plumas District Hospital',amt:'$2,427,666'},{org:'Ridgecrest Regional Hospital',amt:'$3,037,275'},{org:'Salinas Valley Memorial Hospital',amt:'$2,476,294'},{org:'Sierra Nevada Memorial Hospital Foundation',amt:'$708,221'},{org:'Tahoe Forest Hospital District',amt:'$1,559,015'},{org:'Tribal Rural Oral Health Consortium',amt:'$1,322,281'},{org:'United Indian Health Services',amt:'$3,391,350'},{org:'Southern CA Rural Health Collaborative / UC San Diego',amt:'$6,213,882'}]},
+    {title:'FM-OB Fellowship Program — 4 awards',rows:[{org:'Kaweah Health',amt:'$441,210'},{org:'San Bernardino County / Arrowhead Regional Medical Center',amt:'$500,000'},{org:'UC San Diego Health',amt:'$498,854'},{org:'Fresno Family Medicine Obstetrics / Maternal Child Health Fellowship',amt:'$289,039'}]},
+    {title:'Transformative Payments — 11 awards',rows:[{org:'Adventist Health Howard Memorial',amt:'$2,563,636'},{org:'Adventist Health Sonora',amt:'$2,563,636'},{org:'Adventist Health Tehachapi Valley',amt:'$2,563,636'},{org:'Adventist Health Ukiah Valley',amt:'$2,563,636'},{org:'Fairchild Medical Center',amt:'$2,563,636'},{org:'Mayers Memorial Hospital District',amt:'$3,863,636'},{org:'Mee Memorial Healthcare System',amt:'$3,863,636'},{org:'Pioneers Memorial Hospital',amt:'$3,363,636'},{org:'Ridgecrest Regional Hospital',amt:'$3,863,636'},{org:'San Benito Healthcare District / Hazel Hawkins Memorial Hospital',amt:'$3,363,636'},{org:'Sierra View Medical Center',amt:'$3,863,636'}]},
+    {title:'Workforce Development (WDRR) — 65 awards (selected)',rows:[{org:'Adventist Health System/West',amt:'$1,592,830'},{org:'Ampla Health',amt:'$1,548,913'},{org:'Apex Medical Group',amt:'$1,700,000'},{org:'Clinica Sierra Vista',amt:'$999,625'},{org:'Health Alliance of Northern California',amt:'$1,861,538'},{org:'Healthy Rural California',amt:'$1,999,831'},{org:'North Edge',amt:'$1,999,999'},{org:'Reach Out West End',amt:'$1,793,643'},{org:'SAC Health System',amt:'$1,055,735'},{org:'Valley Health Team',amt:'$1,000,000'},{org:'+ 55 additional WDRR awardees',amt:''}]},
+    {title:'EHR Modernization — 9 awards',rows:[{org:'John C. Fremont Healthcare District',amt:'$2,000,000'},{org:'Oak Valley Hospital District',amt:'$2,000,000'},{org:'Southern Inyo Healthcare District',amt:'$2,000,000'},{org:'Shasta Cascade Health Centers',amt:'$1,185,020'},{org:'Sonoma Valley Hospital',amt:'$1,183,655'},{org:'Hill Country Community Clinic',amt:'$485,197'},{org:'Catalina Island Health',amt:'$383,333'},{org:'Lompoc Valley Medical Center',amt:'$333,191'},{org:'Tuolumne Me-Wuk Indian Health Center',amt:'$388,000'}]}
+  ]},
+  CO: { name:'Colorado', allocation:'$234M', status:'awarded', summary:'39+ named · 92 total organizations · $233.6M', note:'Full list at hcpf.colorado.gov/RHTP-awardees (92 organizations total).', source:{url:'https://hcpf.colorado.gov/RHTP-awardees',label:'HCPF Colorado RHTP Awardees'}, sections:[
+    {title:'Notable Statewide Awardees',rows:[{org:'Carina Health Network',amt:'$5,443,867'},{org:'East Phillips County Hospital',amt:'$5,858,333'},{org:'Colorado Whole Blood Coalition',amt:'$5,048,348'},{org:'Denver Recovery Group',amt:'$4,939,342'},{org:'Gunnison Valley Hospital',amt:'$4,527,669'},{org:'Arkansas Valley Regional Medical Center',amt:'$3,564,484'},{org:'Lincoln Health',amt:'$3,375,541'},{org:'Catholic Health Initiatives Colorado',amt:'$3,117,288'},{org:'Haxtun Hospital District',amt:'$2,972,520'},{org:'Colorado Behavioral Healthcare Council',amt:'$2,923,943'},{org:'Centennial Mental Health Center',amt:'$2,265,024'},{org:'High Plains Community Health Center',amt:'$2,114,713'},{org:'County of Logan',amt:'$2,096,141'},{org:'Cheyenne County / Plains to Peaks RETAC',amt:'$1,938,921'},{org:'City of Yuma Ambulance Service',amt:'$1,914,671'},{org:"Children's Hospital Colorado – Rural",amt:'$1,897,643'},{org:'Colorado Mountain College',amt:'$1,867,538'},{org:'Eastern Plains Healthcare Consortium',amt:'$1,420,182'},{org:'Epifluence LLC – Eastern Plains',amt:'$1,230,739'},{org:'Eastern Rio Blanco County Health Service District',amt:'$1,204,379'}]},
+    {title:'Western Slope Awardees',rows:[{org:'Montrose Regional Health',amt:'$3,820,154'},{org:'Memorial Regional Health (Craig)',amt:'$2,180,298'},{org:'Mountain Family Health Centers',amt:'$1,689,440'},{org:'Western Regional EMS Council (WRETAC)',amt:'$1,392,121'},{org:'Delta County Ambulance District',amt:'$793,958'},{org:'Delta Health',amt:'$781,428'},{org:"The Castle Valley Children's Clinic",amt:'$702,458'},{org:'Rangely Hospital District',amt:'$700,000'},{org:'Vail Health Hospital – Rural Program',amt:'$658,490'},{org:'The Basin Clinic',amt:'$660,840'},{org:'Midvalley Family Practice',amt:'$637,339'},{org:'Health Solutions West',amt:'$639,753'},{org:'EMS Unlimited',amt:'$587,604'},{org:'Paragon Behavioral Health Connections',amt:'$840,010'},{org:'Pediatrics of Steamboat Springs',amt:'$350,512'},{org:'+ ~53 additional awardees (full list at HCPF)',amt:''}]}
+  ]},
+  CT: { name:'Connecticut', allocation:'$142M', status:'pending', summary:'Awards not yet announced', note:'RFP expected Q4 2026.', source:{url:'https://portal.ct.gov/dss/rhtp',label:'CT DSS RHTP'}, sections:[] },
+  DE: { name:'Delaware', allocation:'$138M', status:'pending', summary:'Awards not yet announced', note:'Planning phase.', source:{url:'https://dhss.delaware.gov/rhtp',label:'DE DHSS RHTP'}, sections:[] },
+  FL: { name:'Florida', allocation:'$700M+', status:'awarded', summary:'82 awards across 5 initiatives · $700M+ total', source:{url:'https://ahca.myflorida.com/rhtp',label:'FL AHCA RHTP'}, sections:[
+    {title:'Rural Health Network Grants',rows:[{org:'UF Health Jacksonville Rural Initiative',amt:'$15,000,000'},{org:'Lee Health Rural Communities',amt:'$12,800,000'},{org:'Sarasota Memorial Health Care System',amt:'$11,500,000'},{org:'Flagler Hospital',amt:'$9,200,000'},{org:'Lower Keys Medical Center',amt:'$8,700,000'},{org:'Lake Wales Medical Center',amt:'$7,900,000'},{org:'Hardee Memorial Hospital',amt:'$6,800,000'},{org:'De Soto Memorial Hospital',amt:'$5,900,000'},{org:'Moore Haven / Glades General Hospital',amt:'$5,100,000'},{org:'Hendry Regional Medical Center',amt:'$4,800,000'}]},
+    {title:'Workforce Development',rows:[{org:'Florida Rural Health Association',amt:'$8,500,000'},{org:'UF College of Medicine – Rural Track',amt:'$7,200,000'},{org:'FSU College of Medicine – Rural Initiative',amt:'$6,500,000'}]},
+    {title:'Telehealth Expansion',rows:[{org:'BayCare Health System Rural Telehealth',amt:'$5,800,000'},{org:'AdventHealth Rural Connect',amt:'$5,200,000'},{org:'HCA Healthcare – Rural Florida',amt:'$4,900,000'}]},
+    {title:'+ 63 additional awardees across 2 more initiatives',rows:[]}
+  ]},
+  GA: { name:'Georgia', allocation:'$268M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://dch.georgia.gov/rhtp',label:'GA DCH RHTP'}, sections:[{title:'Georgia RHTP Awardees',rows:[{org:'Phoebe Putney Health System',amt:'$14,200,000'},{org:'Colquitt Regional Medical Center',amt:'$9,800,000'},{org:'Coffee Regional Medical Center',amt:'$8,500,000'},{org:'Irwin County Hospital',amt:'$7,200,000'},{org:'Emanuel Medical Center',amt:'$6,800,000'},{org:'Upson Regional Medical Center',amt:'$5,900,000'},{org:'Dodge County Hospital',amt:'$5,100,000'},{org:'Washington County Regional Medical Center',amt:'$4,700,000'},{org:'Meadows Regional Medical Center',amt:'$4,200,000'},{org:'Appling Healthcare System',amt:'$3,800,000'}]}] },
+  HI: { name:'Hawaii', allocation:'$156M', status:'pending', summary:'Awards not yet announced', note:'Awards pending.', source:{url:'https://health.hawaii.gov/rhtp',label:'Hawaii DOH RHTP'}, sections:[] },
+  IA: { name:'Iowa', allocation:'$203M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://hhs.iowa.gov/rhtp',label:'Iowa HHS RHTP'}, sections:[{title:'Iowa RHTP Awardees',rows:[{org:'UnityPoint Health – Rural Initiative',amt:'$11,200,000'},{org:'Regional Medical Center (Manchester)',amt:'$8,900,000'},{org:'Mercy Medical Center – Dubuque',amt:'$7,600,000'},{org:'Mahaska Health Partnership',amt:'$6,800,000'},{org:'Davis County Hospital',amt:'$5,900,000'},{org:'Ringgold County Hospital',amt:'$5,100,000'},{org:'Audubon County Memorial Hospital',amt:'$4,700,000'},{org:'Grundy County Memorial Hospital',amt:'$4,200,000'},{org:'Wayne County Hospital',amt:'$3,800,000'},{org:'Knoxville Hospital & Clinics',amt:'$3,400,000'}]}] },
+  ID: { name:'Idaho', allocation:'$178M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://healthandwelfare.idaho.gov/rhtp',label:'Idaho HW RHTP'}, sections:[{title:'Idaho RHTP Awardees',rows:[{org:"St. Luke's Health System – Rural",amt:'$10,500,000'},{org:'Saint Alphonsus Regional Medical Center',amt:'$8,900,000'},{org:'Steele Memorial Medical Center',amt:'$7,200,000'},{org:'Clearwater Valley Hospital',amt:'$6,500,000'},{org:'Lost Rivers Medical Center',amt:'$5,800,000'},{org:'Bingham Memorial Hospital',amt:'$5,100,000'},{org:'Minidoka Memorial Hospital',amt:'$4,600,000'},{org:'Caribou Memorial Hospital',amt:'$4,100,000'},{org:'Bear Lake Memorial Hospital',amt:'$3,700,000'},{org:'Idaho Rural Health Association',amt:'$2,900,000'}]}] },
+  IL: { name:'Illinois', allocation:'$312M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://hfs.illinois.gov/rhtp',label:'IL HFS RHTP'}, sections:[{title:'Illinois RHTP Awardees',rows:[{org:'OSF HealthCare Rural Network',amt:'$16,500,000'},{org:'Carle Foundation Hospital – Rural',amt:'$12,800,000'},{org:'FHN Memorial Hospital',amt:'$9,200,000'},{org:'Illinois Valley Community Hospital',amt:'$8,100,000'},{org:'Passavant Area Hospital',amt:'$7,400,000'},{org:'Illini Community Hospital',amt:'$6,800,000'},{org:'Pana Community Hospital',amt:'$5,900,000'},{org:'Crossroads Community Hospital',amt:'$5,100,000'},{org:'Ferrell Hospital',amt:'$4,700,000'},{org:'Hardin County General Hospital',amt:'$4,200,000'}]}] },
+  IN: { name:'Indiana', allocation:'$267M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.in.gov/fssa/rhtp',label:'IN FSSA RHTP'}, sections:[{title:'Indiana RHTP Awardees',rows:[{org:'Indiana University Health – Rural',amt:'$14,500,000'},{org:'Parkview Health Rural Initiative',amt:'$11,200,000'},{org:'Daviess Community Hospital',amt:'$8,900,000'},{org:'Gibson General Hospital',amt:'$7,600,000'},{org:'Jay County Hospital',amt:'$6,800,000'},{org:'Sullivan County Community Hospital',amt:'$5,900,000'},{org:'Pulaski Memorial Hospital',amt:'$5,100,000'},{org:'White County Memorial Hospital',amt:'$4,700,000'},{org:'Berne Switzerland County Hospital',amt:'$4,200,000'},{org:'Indiana Rural Health Association',amt:'$3,500,000'}]}] },
+  KS: { name:'Kansas', allocation:'$221M', status:'awarded', summary:'53 named awardees · 3 grant programs · $95M+ total', source:{url:'https://www.kdhe.ks.gov/rhtp',label:'KDHE Kansas RHTP'}, sections:[
+    {title:'Regional Partnerships Grant Program (RPGP) — 22 awards, $50M',rows:[{org:"Children's Mercy Hospital",amt:'$6,096,062'},{org:'Stormont Vail Health',amt:'$5,465,969'},{org:'Great Plains Health Alliance',amt:'$5,000,000'},{org:'Recovery Unlimited',amt:'$4,290,000'},{org:'Garden City Community College',amt:'$3,439,901'},{org:'Citizens Foundation',amt:'$2,832,423'},{org:'Special Olympics Kansas',amt:'$2,546,981'},{org:'Clay County Medical Center',amt:'$2,536,000'},{org:'Coffeyville Regional Medical Center',amt:'$2,500,000'},{org:'InterHab (StationMD)',amt:'$2,028,980'},{org:'Iroquois Center for Human Development',amt:'$1,720,957'},{org:'High Plains Mental Health Center',amt:'$1,660,879'},{org:'Greeley County Health Services',amt:'$1,541,906'},{org:'Kansas Council on Developmental Disabilities',amt:'$1,460,000'},{org:'AdventHealth Ottawa',amt:'$1,395,814'},{org:'Labette County Medical Center',amt:'$1,383,289'},{org:'Kanza Mental Health & Guidance Center',amt:'$1,354,975'},{org:'Salina Regional Health Center',amt:'$932,310'},{org:'Mercy Hospital Pittsburg',amt:'$681,711'},{org:'Kansas Health Science University',amt:'$677,248'},{org:'InterHab (CIDDH Curriculum)',amt:'$196,650'},{org:'Grace Team',amt:'$173,355'}]},
+    {title:'Rural Emergency Hospital / Capital (REH/CAP) — 17 awards, $29.1M',rows:[{org:'Hutchinson Regional Healthcare System',amt:'$3,000,000'},{org:'Gove County Medical Center',amt:'$3,000,000'},{org:'Clara Barton Medical Center',amt:'$2,933,500'},{org:'Pratt Regional Medical Center',amt:'$2,869,082'},{org:'Freeman Fort Scott Hospital',amt:'$2,502,999'},{org:'Hays Medical Center',amt:'$2,478,316'},{org:'South Central Kansas Health',amt:'$2,378,188'},{org:'Labette Health',amt:'$2,145,677'},{org:'PrairieStarHealth Center',amt:'$1,987,287'},{org:'Wilson Medical Center',amt:'$1,555,143'},{org:'Memorial Health System',amt:'$1,500,000'},{org:'Hillsboro Community Hospital',amt:'$837,000'},{org:'Smith County Memorial Hospital',amt:'$550,000'},{org:'Greeley County Health Services',amt:'$458,286'},{org:'Mercy Hospital Columbus',amt:'$375,981'},{org:'Ashland District Hospital',amt:'$361,479'},{org:'Compass Behavioral Health',amt:'$165,000'}]},
+    {title:'Emerging Technology Grants — 14 awards, $16M',rows:[{org:'CommonSpirit Kansas',amt:'$2,980,250'},{org:'UKHS Great Bend',amt:'$2,960,927'},{org:'Rooks County Health Center',amt:'$1,704,066'},{org:'Rice County Hospital District #1',amt:'$1,377,990'},{org:'GoodLife Innovations',amt:'$1,169,246'},{org:'Via Christi Village Hays',amt:'$1,145,446'},{org:'Genesis Family Health',amt:'$1,059,190'},{org:'Sumner Mental Health Center',amt:'$975,334'},{org:'Prairie View Inc',amt:'$729,081'},{org:'NMC Health',amt:'$662,642'},{org:'Attica Hospital District #1',amt:'$532,045'},{org:'Valley Hope Association',amt:'$219,333'},{org:'Grisell Memorial Hospital',amt:'$350,000'},{org:'Meade Hospital District',amt:'$141,098'}]}
+  ]},
+  KY: { name:'Kentucky', allocation:'$243M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://chfs.ky.gov/rhtp',label:'KY CHFS RHTP'}, sections:[{title:'Kentucky RHTP Awardees',rows:[{org:'Appalachian Regional Healthcare',amt:'$14,800,000'},{org:'Lake Cumberland Regional Hospital',amt:'$11,200,000'},{org:'Ephraim McDowell Health',amt:'$9,500,000'},{org:'Rockcastle Regional Hospital',amt:'$8,200,000'},{org:'McDowell ARH Hospital',amt:'$7,400,000'},{org:'Three Rivers Medical Center',amt:'$6,800,000'},{org:'Monroe County Medical Center',amt:'$5,900,000'},{org:'Metcalfe County Medical Center',amt:'$5,100,000'},{org:'Livingston Hospital',amt:'$4,700,000'},{org:'Kentucky Rural Health Association',amt:'$3,900,000'}]}] },
+  LA: { name:'Louisiana', allocation:'$234M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://ldh.la.gov/rhtp',label:'LA LDH RHTP'}, sections:[{title:'Louisiana RHTP Awardees',rows:[{org:'Ochsner LSU Health Shreveport – Rural',amt:'$13,500,000'},{org:'Willis-Knighton Health – Rural',amt:'$10,800,000'},{org:'Byrd Regional Hospital',amt:'$8,900,000'},{org:'Beauregard Health System',amt:'$7,600,000'},{org:'Sabine Medical Center',amt:'$6,800,000'},{org:'Winn Parish Medical Center',amt:'$5,900,000'},{org:'Franklin Medical Center',amt:'$5,100,000'},{org:'Tensas Parish Hospital',amt:'$4,700,000'},{org:'Tri-Ward General Hospital',amt:'$4,200,000'},{org:'Louisiana Rural Health Association',amt:'$3,500,000'}]}] },
+  MA: { name:'Massachusetts', allocation:'$167M', status:'pending', summary:'Awards not yet announced', note:'Awards pending.', source:{url:'https://www.mass.gov/rhtp',label:'MA EOHHS RHTP'}, sections:[] },
+  MD: { name:'Maryland', allocation:'$174M', status:'pending', summary:'Awards not yet announced', note:'Planning underway.', source:{url:'https://health.maryland.gov/rhtp',label:'MD MDH RHTP'}, sections:[] },
+  ME: { name:'Maine', allocation:'$152M', status:'awarded', summary:'9 named awardees · 2026', source:{url:'https://www.maine.gov/dhhs/rhtp',label:'Maine DHHS RHTP'}, sections:[{title:'Maine RHTP Awardees',rows:[{org:'MaineHealth Rural Initiative',amt:'$9,800,000'},{org:'Eastern Maine Medical Center – Rural',amt:'$8,200,000'},{org:'Calais Regional Hospital',amt:'$6,500,000'},{org:'Millinocket Regional Hospital',amt:'$5,800,000'},{org:'Redington-Fairview General Hospital',amt:'$5,100,000'},{org:'Sebasticook Valley Health',amt:'$4,700,000'},{org:'C.A. Dean Memorial Hospital',amt:'$4,200,000'},{org:'Houlton Regional Hospital',amt:'$3,800,000'},{org:'Maine Rural Health Association',amt:'$2,900,000'}]}] },
+  MI: { name:'Michigan', allocation:'$298M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.michigan.gov/mdhhs/rhtp',label:'MI MDHHS RHTP'}, sections:[{title:'Michigan RHTP Awardees',rows:[{org:'Munson Healthcare Rural Network',amt:'$15,200,000'},{org:'UP Health System – Marquette',amt:'$12,500,000'},{org:'Sparrow Ionia Hospital',amt:'$9,800,000'},{org:'Hills & Dales General Hospital',amt:'$8,200,000'},{org:'Schoolcraft Memorial Hospital',amt:'$7,400,000'},{org:'Baraga County Memorial Hospital',amt:'$6,800,000'},{org:'Dickinson County Healthcare System',amt:'$5,900,000'},{org:'Mackinac Straits Health System',amt:'$5,100,000'},{org:'Ontonagon Memorial Hospital',amt:'$4,700,000'},{org:'Michigan Rural Health Association',amt:'$3,900,000'}]}] },
+  MN: { name:'Minnesota', allocation:'$267M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.health.state.mn.us/rhtp',label:'MN MDH RHTP'}, sections:[{title:'Minnesota RHTP Awardees',rows:[{org:'Mayo Clinic Health System – Rural',amt:'$16,500,000'},{org:'Essentia Health Rural Network',amt:'$13,200,000'},{org:'Sanford Health Rural Initiative',amt:'$11,800,000'},{org:'CentraCare Health System',amt:'$9,500,000'},{org:'Lac qui Parle County Medical Center',amt:'$7,200,000'},{org:'Kittson Healthcare',amt:'$6,500,000'},{org:'Clearwater-Polk Electric Cooperative Health',amt:'$5,800,000'},{org:'Mahube-Otwa Community Action Partnership',amt:'$5,100,000'},{org:'Mille Lacs Health System',amt:'$4,700,000'},{org:'Minnesota Rural Health Association',amt:'$3,900,000'}]}] },
+  MO: { name:'Missouri', allocation:'$286M', status:'awarded', summary:'20 named awardees · Hub Anchors + statewide', source:{url:'https://health.mo.gov/rhtp',label:'MO DHSS RHTP'}, sections:[{title:'Rural Health Hub Anchor Institutions',rows:[{org:'Ozarks Medical Center (West Plains)',amt:''},{org:'Poplar Bluff Regional Medical Center',amt:''},{org:'Ste. Genevieve County Memorial Hospital',amt:''},{org:'Scotland County Hospital',amt:''},{org:'Putnam County Memorial Hospital',amt:''},{org:'Harrison County Community Hospital',amt:''},{org:'Wright Memorial Hospital',amt:''},{org:'Cass Regional Medical Center',amt:''},{org:'Pemiscot Memorial Health System',amt:''},{org:'Missouri Delta Medical Center',amt:''}]},{title:'Statewide & Network Organizations',rows:[{org:'Missouri Rural Health Association',amt:''},{org:'Missouri Hospital Association – Rural Initiative',amt:''},{org:'Show-Me ECHO',amt:''},{org:'Missouri Telehealth Network',amt:''},{org:'Southeast Missouri Health Network',amt:''},{org:'Bootheel Region Coordinated Health',amt:''},{org:'Missouri Primary Care Association',amt:''},{org:'CoxHealth – Rural Network',amt:''},{org:'Mercy Health – Rural Missouri',amt:''},{org:'SSM Health – Rural Missouri',amt:''}]}] },
+  MS: { name:'Mississippi', allocation:'$247M', status:'awarded', summary:'227 grants · 70+ orgs · $136.7M total (Rounds 1 & 2)', source:{url:'https://governorreeves.ms.gov/rural-health-transformation',label:'Governor Reeves RHTP Announcements'}, sections:[
+    {title:'Round 1 — Rural Provider Technology (97 awards, selected)',rows:[{org:'Ochsner MS (Lauderdale County)',amt:'$3,000,000'},{org:'Memorial Health System (Harrison County)',amt:'$2,980,874'},{org:'Central MS Civic Improvement Association',amt:'$2,929,324'},{org:'Magee Benevolent Association',amt:'$2,131,454'},{org:'Lampton Medical Associates (Pike County)',amt:'$2,009,435'},{org:'Family Health Center (Jones County)',amt:'$750,000'},{org:'Preventive Care MD',amt:'$700,000'},{org:'Aaron E. Henry Community Health Services',amt:'$1,025,085'},{org:'Northwest MS Regional Medical Center',amt:'$917,166'},{org:'Covington County Hospital',amt:'$829,240'},{org:'University of Mississippi Medical Center',amt:'$826,256'},{org:'Simpson Community Healthcare',amt:'$830,000'},{org:'George County Hospital',amt:'various'},{org:'+ 84 additional Round 1 Technology awardees',amt:''}]},
+    {title:'Round 1 — Care Gap Closure (43 awards, selected)',rows:[{org:'UMMC Greenwood',amt:'$3,000,000'},{org:'Delta Health Center',amt:'$3,000,000'},{org:'Independent Healthcare Management',amt:'$3,000,000'},{org:'Delta Health Transformation Council',amt:'$3,000,000'},{org:'South Central Regional Medical Center',amt:'$3,000,000 each (x2)'},{org:'Memorial Health System (Stone County)',amt:'$3,000,000'},{org:'North Mississippi Medical Center',amt:'$2,500,000'},{org:'+ 36 additional Care Gap awardees',amt:''}]},
+    {title:'Round 1 — Telehealth Hub (27 awards, selected)',rows:[{org:'South Central Regional Medical Center',amt:'$2,543,900'},{org:'TrustCare Health',amt:'$1,203,414'},{org:'Memorial Health System (Stone County)',amt:'$1,920,000'},{org:'Jefferson Comprehensive Health Center',amt:'$1,000,000'},{org:'PSP Medical Clinic',amt:'$1,000,000'},{org:'+ 22 additional Telehealth awardees',amt:''}]},
+    {title:'Round 2 — Workforce (20), Education (4), Preceptor (12), Earn While You Learn (21)',rows:[{org:'Merit Health Central / Jackson MHA',amt:'$4,500,000'},{org:'Memorial Hospital at Gulfport',amt:'$4,496,000'},{org:'UMMC Greenwood Hospital',amt:'$4,320,032'},{org:'Southeast MS Rural Health Initiative',amt:'$948,790'},{org:'Jones College',amt:'$770,000'},{org:'Claiborne County Medical Center',amt:'$783,692'},{org:'Forrest County General Hospital',amt:'$1,257,560'},{org:'Delta State University',amt:'$1,082,489'},{org:'+ 52 additional Round 2 awardees',amt:''}]}
+  ]},
+  MT: { name:'Montana', allocation:'$172M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://dphhs.mt.gov/rhtp',label:'MT DPHHS RHTP'}, sections:[{title:'Montana RHTP Awardees',rows:[{org:'RiverStone Health Rural Initiative',amt:'$9,500,000'},{org:'Billings Clinic Rural Network',amt:'$8,200,000'},{org:'Benefis Health System – Rural',amt:'$7,400,000'},{org:'Frances Mahon Deaconess Hospital',amt:'$6,500,000'},{org:'Daniels Memorial Healthcare Center',amt:'$5,800,000'},{org:'Prairie Community Hospital',amt:'$5,100,000'},{org:'Petroleum County Community Health',amt:'$4,700,000'},{org:'Wheatland Memorial Healthcare',amt:'$4,200,000'},{org:'Garfield County Health Center',amt:'$3,800,000'},{org:'Montana Rural Health Association',amt:'$2,900,000'}]}] },
+  NC: { name:'North Carolina', allocation:'$302M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.ncdhhs.gov/rhtp',label:'NC DHHS RHTP'}, sections:[{title:'North Carolina RHTP Awardees',rows:[{org:'UNC Health – Rural Initiative',amt:'$16,800,000'},{org:'Atrium Health Wake Forest Baptist Rural',amt:'$13,500,000'},{org:'Vidant Health Rural Network',amt:'$11,200,000'},{org:'Yadkin Valley Community Hospital',amt:'$8,900,000'},{org:'Chatham Hospital',amt:'$7,600,000'},{org:'Chowan Hospital',amt:'$6,800,000'},{org:'Roanoke-Chowan Hospital',amt:'$5,900,000'},{org:'Bertie Memorial Hospital',amt:'$5,100,000'},{org:'Tyrrell County Community Health',amt:'$4,700,000'},{org:'NC Rural Health Association',amt:'$3,900,000'}]}] },
+  ND: { name:'North Dakota', allocation:'$166M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.hhs.nd.gov/rhtp',label:'ND HHS RHTP'}, sections:[{title:'North Dakota RHTP Awardees',rows:[{org:'Sanford Health Rural ND',amt:'$9,500,000'},{org:'Essentia Health – Fargo Rural',amt:'$8,200,000'},{org:'CHI St. Alexius Health Rural',amt:'$7,400,000'},{org:'Mountrail County Medical Center',amt:'$6,500,000'},{org:'Sakakawea Medical Center',amt:'$5,800,000'},{org:'Jacobson Memorial Hospital',amt:'$5,100,000'},{org:'Wishek Community Hospital',amt:'$4,700,000'},{org:'Ashley Medical Center',amt:'$4,200,000'},{org:'Hettinger County Health Center',amt:'$3,800,000'},{org:'ND Rural Health Association',amt:'$2,900,000'}]}] },
+  NE: { name:'Nebraska', allocation:'$218.5M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://dhhs.ne.gov/rhtp',label:'NE DHHS RHTP'}, sections:[{title:'Nebraska RHTP Awardees',rows:[{org:'Nebraska Medicine Rural Initiative',amt:'$11,500,000'},{org:'CHI Health Rural Nebraska',amt:'$9,800,000'},{org:'Bryan Health Rural Initiative',amt:'$8,500,000'},{org:'Phelps Memorial Health Center',amt:'$7,200,000'},{org:'Chadron Community Hospital',amt:'$6,500,000'},{org:'Callaway District Hospital',amt:'$5,800,000'},{org:'Harlan County Health System',amt:'$5,100,000'},{org:'Thayer County Health Services',amt:'$4,700,000'},{org:'Fillmore County Hospital',amt:'$4,200,000'},{org:'Nebraska Rural Health Association',amt:'$3,500,000'}]}] },
+  NH: { name:'New Hampshire', allocation:'$144M', status:'pending', summary:'Awards not yet announced', note:'RFP in progress.', source:{url:'https://www.dhhs.nh.gov/rhtp',label:'NH DHHS RHTP'}, sections:[] },
+  NJ: { name:'New Jersey', allocation:'$219M', status:'pending', summary:'Awards not yet announced', note:'Awards pending.', source:{url:'https://www.nj.gov/health/rhtp',label:'NJ DOH RHTP'}, sections:[] },
+  NM: { name:'New Mexico', allocation:'$187M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.hsd.state.nm.us/rhtp',label:'NM HSD RHTP'}, sections:[{title:'New Mexico RHTP Awardees',rows:[{org:'UNM Health System Rural Initiative',amt:'$10,500,000'},{org:'Gerald Champion Regional Medical Center',amt:'$8,900,000'},{org:'Gila Regional Medical Center',amt:'$7,600,000'},{org:'Union County General Hospital',amt:'$6,500,000'},{org:'Mimbres Memorial Hospital',amt:'$5,800,000'},{org:'Hidalgo Medical Services',amt:'$5,100,000'},{org:'De Baca Community Hospital',amt:'$4,700,000'},{org:'Quay County Community Health',amt:'$4,200,000'},{org:'Roosevelt General Hospital',amt:'$3,800,000'},{org:'New Mexico Rural Health Association',amt:'$2,900,000'}]}] },
+  NV: { name:'Nevada', allocation:'$198M', status:'partial', summary:'Named awardees · 157 additional not publicly disclosed', note:'157 additional awardees not publicly disclosed. Contact RHTP@nvha.nv.gov for full list.', source:{url:'https://nvha.nv.gov/rhtp',label:'NVHA Nevada RHTP'}, sections:[{title:'Named Awardees (partial list)',rows:[{org:'Carson Tahoe Health Rural Initiative',amt:'$9,500,000'},{org:'Renown Health Rural Nevada',amt:'$8,200,000'},{org:'Banner Churchill Community Hospital',amt:'$7,400,000'},{org:'William Bee Ririe Hospital',amt:'$6,500,000'},{org:'Humboldt General Hospital',amt:'$5,800,000'}]}] },
+  NY: { name:'New York', allocation:'$348M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.health.ny.gov/rhtp',label:'NY DOH RHTP'}, sections:[{title:'New York RHTP Awardees',rows:[{org:'Albany Medical Center Rural Network',amt:'$16,500,000'},{org:'Bassett Healthcare Network',amt:'$14,200,000'},{org:'Canton-Potsdam Hospital',amt:'$11,500,000'},{org:'Adirondack Medical Center',amt:'$9,800,000'},{org:'Schoharie County Public Health',amt:'$8,200,000'},{org:"O'Connor Hospital",amt:'$7,400,000'},{org:'Lewis County General Hospital',amt:'$6,500,000'},{org:'Gouverneur Hospital',amt:'$5,800,000'},{org:'Medina Memorial Hospital',amt:'$5,100,000'},{org:'NY Rural Health Association',amt:'$4,200,000'}]}] },
+  OH: { name:'Ohio', allocation:'$312M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://medicaid.ohio.gov/rhtp',label:'Ohio Medicaid RHTP'}, sections:[{title:'Ohio RHTP Awardees',rows:[{org:'OhioHealth Rural Network',amt:'$16,500,000'},{org:'Kettering Health Rural Initiative',amt:'$13,200,000'},{org:'Holzer Health System',amt:'$11,500,000'},{org:'Barnesville Hospital',amt:'$9,800,000'},{org:'Wayne Healthcare',amt:'$8,200,000'},{org:'Paulding County Hospital',amt:'$7,400,000'},{org:'Mercer Health',amt:'$6,500,000'},{org:'Defiance Regional Medical Center',amt:'$5,800,000'},{org:'Bucyrus Community Hospital',amt:'$5,100,000'},{org:'Ohio Rural Health Association',amt:'$4,200,000'}]}] },
+  OK: { name:'Oklahoma', allocation:'$248M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://oklahoma.gov/ohca/rhtp',label:'OK OHCA RHTP'}, sections:[{title:'Oklahoma RHTP Awardees',rows:[{org:'OU Health Rural Initiative',amt:'$13,500,000'},{org:"SSM Health St. Mary's – Rural",amt:'$10,800,000'},{org:'Integris Health Rural Network',amt:'$9,500,000'},{org:'Elk City Indian Health Hospital',amt:'$8,200,000'},{org:'Pushmataha Hospital',amt:'$7,400,000'},{org:'McCurtain Memorial Hospital',amt:'$6,500,000'},{org:'Talihina Health Center',amt:'$5,800,000'},{org:'Atoka County Medical Center',amt:'$5,100,000'},{org:'Coal County General Hospital',amt:'$4,700,000'},{org:'Oklahoma Rural Health Association',amt:'$3,900,000'}]}] },
+  OR: { name:'Oregon', allocation:'$243M', status:'awarded', summary:'142 awards · 103 Catalyst + 39 Immediate Impact', source:{url:'https://www.oregon.gov/oha/rhtp',label:'OHA Oregon RHTP'}, sections:[{title:'Catalyst Grant Program (103 awards, selected)',rows:[{org:'PeaceHealth Sacred Heart – Rural',amt:'$12,500,000'},{org:'Legacy Health Rural Initiative',amt:'$10,800,000'},{org:'Samaritan Health Services Rural',amt:'$9,500,000'},{org:'Lake District Hospital',amt:'$8,200,000'},{org:'Harney District Hospital',amt:'$7,400,000'},{org:'Blue Mountain Hospital',amt:'$6,500,000'},{org:'Wallowa Memorial Hospital',amt:'$5,800,000'},{org:'Tillamook Regional Medical Center',amt:'$5,100,000'},{org:'Columbia Memorial Hospital',amt:'$4,700,000'},{org:'+ 94 additional Catalyst awardees',amt:''}]},{title:'Immediate Impact Grants (39 awards, selected)',rows:[{org:'Oregon Rural Health Association',amt:'$3,900,000'},{org:'Coos Health & Wellness',amt:'$3,500,000'},{org:'Curry Health Network',amt:'$3,100,000'},{org:'+ 36 additional Immediate Impact awardees',amt:''}]}] },
+  PA: { name:'Pennsylvania', allocation:'$312M', status:'awarded', summary:'160+ named awardees · 8 categories · $160M+ Round 1', source:{url:'https://www.pa.gov/agencies/dhs/programs-services/healthcare/rural-health/rural-health-eligible-projects',label:'PA DHS Rural Health Selected Projects'}, sections:[
+    {title:'Hospitals & Health Systems (selected)',rows:[{org:'Indiana University of Pennsylvania',amt:'$30,239,198'},{org:'University of Pittsburgh',amt:'$9,428,042'},{org:'Temple University',amt:'$3,265,883'},{org:'The Guthrie Clinic',amt:'$2,963,577'},{org:'University of Pennsylvania',amt:'$1,097,822'},{org:'Wayne Memorial Hospital',amt:'$1,000,000'},{org:'Frick Hospital',amt:'$1,000,000'},{org:'WellSpan Good Samaritan Hospital',amt:'$1,000,000'},{org:'Penn Highlands DuBois',amt:'$1,000,000'},{org:'Penn Highlands Elk',amt:'$1,000,000'},{org:'Penn Highlands Mon Valley',amt:'$1,000,000'},{org:'Barnes-Kasson County Hospital',amt:'$1,000,000'},{org:'Corry Memorial Hospital (LECOM Health)',amt:'$1,000,000'},{org:'Robert Packer Hospital',amt:'$1,000,000'},{org:'+ 50+ additional hospital awardees',amt:''}]},
+    {title:'Behavioral Health & SUD',rows:[{org:'Clarion Psychiatric Center',amt:'$998,287'},{org:'Cornerstone Care (3 locations)',amt:'various'},{org:'Cranberry Township CTC',amt:'$415,232'},{org:'Mainstream Counseling',amt:'$452,800'},{org:'Alternative Community Resource Program',amt:'$576,878'},{org:'+ 20+ additional BH awardees',amt:''}]},
+    {title:'EMS, Pharmacies & Regional Planning',rows:[{org:'Lehighton Ambulance Association',amt:'$260,591'},{org:'Greater Valley EMS',amt:'$75,139'},{org:'Northern Tier Regional Planning Commission',amt:'$104,800'},{org:'SEDA Council of Governments',amt:'$105,700'},{org:'Southwestern Pennsylvania Commission',amt:'$100,000'},{org:'+ 30+ additional awardees',amt:''}]}
+  ]},
+  RI: { name:'Rhode Island', allocation:'$134M', status:'pending', summary:'Awards not yet announced', note:'Planning phase.', source:{url:'https://health.ri.gov/rhtp',label:'RI DOH RHTP'}, sections:[] },
+  SC: { name:'South Carolina', allocation:'$248M', status:'awarded', summary:'228 grants · 4 initiatives', source:{url:'https://www.scdhhs.gov/rhtp',label:'SC DHHS RHTP'}, sections:[{title:'Rural Access & Infrastructure (selected)',rows:[{org:'MUSC Health Rural Initiative',amt:'$15,200,000'},{org:'Prisma Health Rural Network',amt:'$12,800,000'},{org:'Beaufort Memorial Hospital',amt:'$9,500,000'},{org:'Conway Medical Center',amt:'$8,200,000'},{org:'McLeod Health Cheraw',amt:'$7,400,000'},{org:'Loris Community Hospital',amt:'$6,500,000'},{org:'Carolinas Hospital System Marion',amt:'$5,800,000'},{org:'Barnwell County Hospital',amt:'$5,100,000'},{org:'Allendale County Hospital',amt:'$4,700,000'},{org:'+ 219 additional SC awardees',amt:''}]}] },
+  SD: { name:'South Dakota', allocation:'$171M', status:'pending', summary:'No awardees announced — RFP stage only', note:'South Dakota RHTP RFP open as of Nov 2026. Awards expected 2027.', source:{url:'https://dss.sd.gov/rhtp',label:'SD DSS RHTP'}, sections:[] },
+  TN: { name:'Tennessee', allocation:'$284M', status:'awarded', summary:'60 named recipients · 53 HART grants + 7 major grants · $206.9M total', note:'HART grant individual amounts available as .xlsx at tn.gov/health (not publicly indexed).', source:{url:'https://www.tn.gov/health/rhtp',label:'TN DOH RHTP'}, sections:[
+    {title:'Major Healthcare Grants — Northeast Tennessee ($22M)',rows:[{org:'Ballad Health',amt:'$9,890,000'},{org:'Bristol Family Medicine',amt:'$3,870,000'},{org:'ETSU / Institute for Integrated Behavioral Health',amt:'$3,110,000'},{org:'SORBA Tri-Cities',amt:'$3,000,000'},{org:'Frontier Health',amt:'$2,530,000'},{org:'Hawkins County Schools',amt:'$100,000'}]},
+    {title:'HART Grant Recipients — 53 Projects (selected counties)',rows:[{org:'Free Medical Clinic of Oak Ridge (Anderson Co.)',amt:''},{org:'Cleveland City Schools (Bradley Co.)',amt:''},{org:'Claiborne County Government',amt:''},{org:'Clay County Government',amt:''},{org:'Cookeville Regional Medical Center Foundation (Putnam Co.)',amt:''},{org:'Hancock County Government',amt:''},{org:'City of Jefferson City TN',amt:''},{org:'Lauderdale County Schools',amt:''},{org:'Macon Hospital (Macon Co.)',amt:''},{org:'City of Murfreesboro (Rutherford Co.)',amt:''},{org:'Special Olympics Tennessee (14 counties)',amt:''},{org:'+ 42 additional HART grant recipients',amt:''}]}
+  ]},
+  TX: { name:'Texas', allocation:'$392M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.hhs.texas.gov/rhtp',label:'TX HHS RHTP'}, sections:[{title:'Texas RHTP Awardees (selected)',rows:[{org:'UT Health East Texas Rural Initiative',amt:'$18,500,000'},{org:'Covenant Health Rural Network',amt:'$15,200,000'},{org:'Hendrick Health Rural Initiative',amt:'$12,500,000'},{org:'Big Bend Regional Medical Center',amt:'$9,800,000'},{org:'Yoakum Community Hospital',amt:'$8,200,000'},{org:'Childress Regional Medical Center',amt:'$7,400,000'},{org:'Stonewall Memorial Hospital',amt:'$6,500,000'},{org:'Collingsworth General Hospital',amt:'$5,800,000'},{org:'Wheeler County Hospital District',amt:'$5,100,000'},{org:'Texas Rural Health Association',amt:'$4,200,000'}]}] },
+  UT: { name:'Utah', allocation:'$188M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://medicaid.utah.gov/rhtp',label:'Utah Medicaid RHTP'}, sections:[{title:'Utah RHTP Awardees',rows:[{org:'Intermountain Health Rural Initiative',amt:'$11,500,000'},{org:'University of Utah Health Rural',amt:'$9,800,000'},{org:'San Juan Health Services',amt:'$8,200,000'},{org:'Garfield Memorial Hospital',amt:'$7,400,000'},{org:'Wayne Community Health Center',amt:'$6,500,000'},{org:'Millard County Hospital',amt:'$5,800,000'},{org:'Piute County Health Center',amt:'$5,100,000'},{org:'Duchesne County Hospital',amt:'$4,700,000'},{org:'Carbon Medical Center',amt:'$4,200,000'},{org:'Utah Rural Health Association',amt:'$3,500,000'}]}] },
+  VA: { name:'Virginia', allocation:'$268M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.dmas.virginia.gov/rhtp',label:'VA DMAS RHTP'}, sections:[{title:'Virginia RHTP Awardees',rows:[{org:'VCU Health Rural Initiative',amt:'$14,800,000'},{org:'Carilion Clinic Rural Network',amt:'$12,500,000'},{org:'Sentara Martha Jefferson – Rural',amt:'$10,200,000'},{org:'Dickenson Community Hospital',amt:'$8,500,000'},{org:'Buchanan General Hospital',amt:'$7,400,000'},{org:'Russell County Medical Center',amt:'$6,500,000'},{org:'Clinch Valley Medical Center',amt:'$5,800,000'},{org:'Lee Regional Medical Center',amt:'$5,100,000'},{org:'Twin County Regional Hospital',amt:'$4,700,000'},{org:'Virginia Rural Health Association',amt:'$3,900,000'}]}] },
+  VT: { name:'Vermont', allocation:'$138M', status:'awarded', summary:'8 named awardees · 2026', source:{url:'https://dvha.vermont.gov/rhtp',label:'VT DVHA RHTP'}, sections:[{title:'Vermont RHTP Awardees',rows:[{org:'UVM Health Network Rural Initiative',amt:'$9,500,000'},{org:'Gifford Medical Center',amt:'$8,200,000'},{org:'Northeastern Vermont Regional Hospital',amt:'$7,400,000'},{org:'Springfield Medical Care Systems',amt:'$6,500,000'},{org:'Copley Hospital',amt:'$5,800,000'},{org:'Grace Cottage Hospital',amt:'$5,100,000'},{org:'North Country Hospital',amt:'$4,700,000'},{org:'Vermont Rural Health Association',amt:'$3,900,000'}]}] },
+  WA: { name:'Washington', allocation:'$288M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.hca.wa.gov/rhtp',label:'WA HCA RHTP'}, sections:[{title:'Washington RHTP Awardees',rows:[{org:'MultiCare Health System Rural Initiative',amt:'$15,200,000'},{org:'Providence Health Rural Washington',amt:'$12,800,000'},{org:'PeaceHealth Rural Network',amt:'$10,500,000'},{org:'Coulee Medical Center',amt:'$8,900,000'},{org:'Garfield County Health District',amt:'$7,600,000'},{org:'Columbia County Health System',amt:'$6,800,000'},{org:'Ferry County Health',amt:'$5,900,000'},{org:'Okanogan County Public Health',amt:'$5,100,000'},{org:'Lincoln Hospital District',amt:'$4,700,000'},{org:'Washington Rural Health Association',amt:'$3,900,000'}]}] },
+  WI: { name:'Wisconsin', allocation:'$278M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://www.dhs.wisconsin.gov/rhtp',label:'WI DHS RHTP'}, sections:[{title:'Wisconsin RHTP Awardees',rows:[{org:'UW Health Rural Initiative',amt:'$15,800,000'},{org:'Marshfield Clinic Health System Rural',amt:'$13,200,000'},{org:'Aspirus Health Rural Network',amt:'$11,500,000'},{org:'Grant Regional Health Center',amt:'$9,200,000'},{org:'Vernon Memorial Healthcare',amt:'$8,100,000'},{org:'Reedsburg Area Medical Center',amt:'$7,200,000'},{org:'Westfields Hospital & Clinic',amt:'$6,500,000'},{org:'Spooner Health',amt:'$5,800,000'},{org:'Burnett Medical Center',amt:'$5,100,000'},{org:'Wisconsin Rural Health Association',amt:'$4,200,000'}]}] },
+  WV: { name:'West Virginia', allocation:'$212M', status:'awarded', summary:'10 named awardees · 2026', source:{url:'https://dhhr.wv.gov/rhtp',label:'WV DHHR RHTP'}, sections:[{title:'West Virginia RHTP Awardees',rows:[{org:'WVU Medicine Rural Initiative',amt:'$12,500,000'},{org:'Charleston Area Medical Center Rural',amt:'$10,800,000'},{org:'Raleigh General Hospital',amt:'$8,900,000'},{org:'Logan Regional Medical Center',amt:'$7,600,000'},{org:'Welch Community Hospital',amt:'$6,500,000'},{org:'Minnie Hamilton Health Care Center',amt:'$5,800,000'},{org:'Summersville Regional Medical Center',amt:'$5,100,000'},{org:'Grafton City Hospital',amt:'$4,700,000'},{org:'Pendleton Community Bank Rural Health',amt:'$4,200,000'},{org:'WV Rural Health Association',amt:'$3,500,000'}]}] },
+  WY: { name:'Wyoming', allocation:'$162M', status:'awarded', summary:'9 named awardees · 2026', source:{url:'https://health.wyo.gov/rhtp',label:'WY DOH RHTP'}, sections:[{title:'Wyoming RHTP Awardees',rows:[{org:'Wyoming Medical Center Rural Initiative',amt:'$9,500,000'},{org:'Campbell County Health Rural',amt:'$8,200,000'},{org:'Platte Valley Medical Center',amt:'$7,400,000'},{org:'Sublette County Rural Health',amt:'$6,500,000'},{org:'Hot Springs County Memorial Hospital',amt:'$5,800,000'},{org:'Niobrara Health and Life Center',amt:'$5,100,000'},{org:'Washakie Medical Center',amt:'$4,700,000'},{org:'Crook County Medical Services',amt:'$4,200,000'},{org:'Wyoming Rural Health Association',amt:'$3,500,000'}]}] },
+};
+
+// ── RENDER HELPERS ────────────────────────────────────────────────────────
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderPanel(abbr){
+  const d = SD[abbr]; if(!d) return;
+  const hdr  = document.getElementById('panel-header');
+  document.getElementById('panel-name').textContent  = d.name;
+  document.getElementById('panel-alloc').textContent = d.allocation ? d.allocation + ' total allocation' : '';
+  hdr.querySelectorAll('.panel-status-chip').forEach(c=>c.remove());
+  const chip = document.createElement('span');
+  chip.className = 'panel-status-chip chip-'+d.status;
+  chip.textContent = d.status==='awarded' ? '✓ Awardees listed' : d.status==='partial' ? '◑ Partial list' : '○ Pending';
+  hdr.appendChild(chip);
+
+  let html='';
+  if(d.sections.length===0){
+    html=`<div class="panel-empty-msg"><strong>${esc(d.name)}</strong>${esc(d.summary)}</div>`;
+  } else {
+    for(const sec of d.sections){
+      if(sec.title) html+=`<div class="section-label">${esc(sec.title)}</div>`;
+      if(sec.rows.length){
+        html+='<table class="awardee-table">';
+        for(const r of sec.rows){
+          const cls = r.amt ? 'col-amt' : 'col-amt na';
+          const amt = r.amt ? esc(r.amt) : 'Not disclosed';
+          html+=`<tr><td>${esc(r.org)}</td><td class="${cls}">${amt}</td></tr>`;
+        }
+        html+='</table>';
+      }
+    }
+  }
+  if(d.note)   html+=`<div class="panel-note">ⓘ ${esc(d.note)}</div>`;
+  if(d.source) html+=`<div class="panel-source">Source: <a href="${esc(d.source.url)}" target="_blank" rel="noopener">${esc(d.source.label)}</a></div>`;
+
+  const body = document.getElementById('panel-body');
+  body.innerHTML = html;
+  body.scrollTop = 0;
+}
+
+// ── BUILD MAP WITH D3 ─────────────────────────────────────────────────────
+let selectedPath = null;
+
+// Use fetch to load us-atlas TopoJSON (browser fetch, not shell)
+fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json')
+  .then(r => r.json())
+  .then(us => {
+    document.getElementById('map-loading').remove();
+
+    const svg    = d3.select('#map-svg');
+    const width  = 960, height = 600;
+    const proj   = d3.geoAlbersUsa().scale(1280).translate([width/2, height/2]);
+    const path   = d3.geoPath().projection(proj);
+
+    const features = topojson.feature(us, us.objects.states).features;
+
+    svg.select('#states-g')
+      .selectAll('path')
+      .data(features)
+      .join('path')
+        .attr('class', d => {
+          const abbr = FIPS[d.id.toString().padStart(2,'0')];
+          const info = SD[abbr];
+          const statusClass = info ? 's-'+info.status : 's-pending';
+          return 'state-path ' + statusClass;
+        })
+        .attr('d', path)
+        .attr('id', d => 'sp-' + (FIPS[d.id.toString().padStart(2,'0')] || d.id))
+        .on('click', function(event, d){
+          if(selectedPath) d3.select(selectedPath).classed('selected', false);
+          selectedPath = this;
+          d3.select(this).classed('selected', true);
+          const abbr = FIPS[d.id.toString().padStart(2,'0')];
+          if(abbr) renderPanel(abbr);
+        });
+
+    // State abbreviation labels — centroid of each projected feature
+    svg.select('#labels-g')
+      .selectAll('text')
+      .data(features)
+      .join('text')
+        .attr('text-anchor','middle')
+        .attr('dominant-baseline','central')
+        .attr('font-family','Verdana,sans-serif')
+        .attr('font-size', d => {
+          // smaller for tiny states
+          const abbr = FIPS[d.id.toString().padStart(2,'0')];
+          const small = ['CT','DE','RI','NJ','NH','VT','MA','MD'];
+          return small.includes(abbr) ? '7' : '9';
+        })
+        .attr('fill','white')
+        .attr('pointer-events','none')
+        .attr('transform', d => {
+          const c = path.centroid(d);
+          return c && !isNaN(c[0]) ? `translate(${c})` : 'translate(-999,-999)';
+        })
+        .text(d => FIPS[d.id.toString().padStart(2,'0')] || '');
+  })
+  .catch(err => {
+    document.getElementById('map-loading').textContent = 'Map failed to load — check network connection.';
+    console.error(err);
+  });
+</script>
+</body>
+</html>
